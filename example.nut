@@ -1,5 +1,5 @@
-ass Fake {
-    
+class Fake {
+
     static _fakes = {};
 
     _originalObject = null;
@@ -13,8 +13,8 @@ ass Fake {
 
         _fakes[obj] <- this;
     }
-    
-    function CallsTo(obj, methodName) {
+
+    static function CallsTo(obj, methodName) {
         foreach(original, fake in _fakes) {
             if (fake == obj) return obj.spyOn(methodName);
         }
@@ -33,13 +33,19 @@ ass Fake {
     }
 
     function _get(idx) {
+        // If we have a spy, return it
         if (idx in _tracking) {
             local spy = _tracking[idx];
             return spy.invoke.bindenv(spy);
-        } 
-        
+        }
+
+        // Otherwise return the origin method, but bind it to the Fake parent
         if (idx in _originalObject) {
-            return _originalObject[idx].bindenv(_originalObject);
+            if (typeof idx == "function") {
+                return _originalObject[idx].bindenv(this);
+            }
+
+            return _originalObject[idx];
         }
 
         throw null;
