@@ -70,13 +70,16 @@ class Spy {
     _actualTimeout = null;
 
     // Behaviour
-    _callsThrough = null;
+    _callsBaseMethod = null;
     _throws = null;
     _returns = null;
-    
+    _invokes = null;
+
     constructor(fakeObject, methodName) {
         // Don't let developers shoot themselves in the foot by spying on something they can't
         if (!(methodName in fakeObject)) throw format("the index '%s' does not exist", methodName);
+        if (typeof fakeObject[methodName] != "function") throw format("the index '%s is not a method", methodName);
+
         _object = fakeObject;
         _method = _object[methodName];
         _methodName = methodName;
@@ -87,12 +90,16 @@ class Spy {
         // Setup out timeout variables
         _timeout = 0;
         _actualTimeout = 0;
-        
-        // Don't call through by default
-        _callsThrough = false;
+
+        // Don't call base method by default
+        _callsBaseMethod = false;
+
+        // Create our list of custom code to run on invocation
+        _invokes = [];
     }
 
     //-------------------- MAIN INVOKE METHOD --------------------//
+    // Called when the method is invoked
     function invoke(...) {
         local invocation = {
             "params": vargv,
@@ -105,9 +112,14 @@ class Spy {
 
         // Synchronous sleep for now
         imp.sleep(_actualTimeout);
-        
+
+        // Invoke any behaviour added with .invokes(callback)
+        foreach(callback in _invokes) {
+            callback();
+        }
+
         // If we're not calling the method:
-        if(!_callsThrough) {
+        if(!_callsBaseMethod) {
             invocation.throws = _throws;
             invocation.returns = _returns;
 
@@ -130,9 +142,9 @@ class Spy {
     }
 
     //--------------------- Behaviour modifiers --------------------//
-    function callsThrough() {
-        _callsThrough = true;
-        
+        function invokes(callback) {
+        _invokes.push(callback);
+
         return this;
     }
 
@@ -146,11 +158,16 @@ class Spy {
     function returns(obj) {
         _returns = obj;
         _throws = null;
-        
+
         return this;
     }
-    
-    // Timing functions:
+
+    function callsBaseMethod() {
+        _callsBaseMethod = true;
+
+        return this;
+    }
+
     function after(timeout) {
         _timeout = timeout;
         _actualTimeout = timeout;
@@ -243,26 +260,40 @@ class Spy {
             case "minutes":
                 return _minutes();
         }
-        
+
         throw null;
     }
-    
+
     function _typeof() {
         return typeof _object[method];
     }
 }
 
+class X {
+    _x = null;
 
-device <- Fake(device);
+    function get(cb) {
+        local request = http.get(http.agenturl());
+        request.sendasync(_processRespFactory(cb));
+    }
 
-Fake.CallsTo(device, "send").and.callsThrough();
-
-
-function test() {
-    device.send("test", 123);
-    Fake.CallsTo(device, "send").shouldHaveBeenCalledWith("test", 1234);
-    server.log("All Tests Passed");
+    function _processRespFactory(cb) {
+        return function(resp) {
+            server.log("In CB");
+            cb(resp);
+        };
+    }
 }
 
-test();
+http.onrequest(function(req, resp) {
+    resp.send(200, "Yeup");
+});
 
+x <- Fake(X());
+Fake.CallsTo(x, "get").invokes(function() {
+    server.log("Hello!");
+}).and.callsBaseMethod();
+
+x.get(function(resp) {
+    server.log(resp.statuscode);
+});

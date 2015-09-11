@@ -70,10 +70,11 @@ class Spy {
     _actualTimeout = null;
 
     // Behaviour
-    _callsThrough = null;
+    _callsBaseMethod = null;
     _throws = null;
     _returns = null;
-    
+    _invokes = null;
+
     constructor(fakeObject, methodName) {
         // Don't let developers shoot themselves in the foot by spying on something they can't
         if (!(methodName in fakeObject)) throw format("the index '%s' does not exist", methodName);
@@ -89,14 +90,18 @@ class Spy {
         // Setup out timeout variables
         _timeout = 0;
         _actualTimeout = 0;
-        
-        // Don't call through by default
-        _callsThrough = false;
+
+        // Don't call base method by default
+        _callsBaseMethod = false;
+
+        // Create our list of custom code to run on invocation
+        _invokes = [];
     }
 
     //-------------------- MAIN INVOKE METHOD --------------------//
+    // Called when the method is invoked
     function invoke(...) {
-        local invocation = { 
+        local invocation = {
             "params": vargv,
             "throws": null,
             "returns": null
@@ -107,9 +112,14 @@ class Spy {
 
         // Synchronous sleep for now
         imp.sleep(_actualTimeout);
-        
+
+        // Invoke any behaviour added with .invokes(callback)
+        foreach(callback in _invokes) {
+            callback();
+        }
+
         // If we're not calling the method:
-        if(!_callsThrough) {
+        if(!_callsBaseMethod) {
             invocation.throws = _throws;
             invocation.returns = _returns;
 
@@ -132,9 +142,9 @@ class Spy {
     }
 
     //--------------------- Behaviour modifiers --------------------//
-    function callsThrough() {
-        _callsThrough = true;
-        
+        function invokes(callback) {
+        _invokes.push(callback);
+
         return this;
     }
 
@@ -151,8 +161,13 @@ class Spy {
 
         return this;
     }
-    
-    // Timing functions:
+
+    function callsBaseMethod() {
+        _callsBaseMethod = true;
+
+        return this;
+    }
+
     function after(timeout) {
         _timeout = timeout;
         _actualTimeout = timeout;
