@@ -75,8 +75,10 @@ class Spy {
     _returns = null;
     
     constructor(fakeObject, methodName) {
-        // Store core properties
+        // Don't let developers shoot themselves in the foot by spying on something they can't
         if (!(methodName in fakeObject)) throw format("the index '%s' does not exist", methodName);
+        if (typeof fakeObject[methodName] != "function") throw format("the index '%s is not a method", methodName);
+
         _object = fakeObject;
         _method = _object[methodName];
         _methodName = methodName;
