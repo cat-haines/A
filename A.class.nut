@@ -1,4 +1,14 @@
-class Fake {
+A <- {
+    CallTo = function(obj, methodName) {
+        foreach(original, fake in A.Fake._fakes) {
+            if (fake == obj) return obj.spyOn(methodName);
+        }
+
+        throw "The first parameter of A.CallTo must be A.Fake";
+    }
+};
+
+class A.Fake {
 
     static _fakes = {};
 
@@ -14,24 +24,17 @@ class Fake {
         _fakes[obj] <- this;
     }
 
-    static function CallsTo(obj, methodName) {
-        foreach(original, fake in _fakes) {
-            if (fake == obj) return obj.spyOn(methodName);
-        }
-
-        throw "The first parameter of CallsTo must be a Fake";
-    }
-
     function spyOn(methodName) {
         // If we're already spying on the method, return the spy
         if (methodName in _tracking) return _tracking[methodName];
 
         // Create, store and return a new spy otherwise
-        _tracking[methodName] <- Spy(this, methodName);
+        _tracking[methodName] <- A.Spy(this, methodName);
 
         return _tracking[methodName];
     }
 
+    //-------------------- PRIVATE / HELPER METHODS --------------------//
     function _get(idx) {
         // If we have a spy, return it
         if (idx in _tracking) {
@@ -56,7 +59,7 @@ class Fake {
     }
 }
 
-class Spy {
+class A.Spy {
     // The object + method we're spying on
     _object = null;
     _method = null;
@@ -142,9 +145,13 @@ class Spy {
     }
 
     //--------------------- Behaviour modifiers --------------------//
-        function invokes(callback) {
+    function invokes(callback) {
         _invokes.push(callback);
 
+        return this;
+    }
+
+    function doesNothing() {
         return this;
     }
 
@@ -177,13 +184,13 @@ class Spy {
 
     //-------------------- ASSERTIONS --------------------//
     function shouldHaveBeenCalled(num = 1) {
-        if (_invocations.len() != num) throw format("%s called %d times (expected %d).", _methodName, _invocations.len(), num);
+        if (_invocations.len() != num) throw format("Expected %s to have been called %d times (actual %d).", _methodName, num, _invocations.len());
 
         return true;
     }
 
     function shouldHaveBeenCalledWith(...) {
-        if(_invocations.len() == 0) throw format("%s called %d times (expected 1 or more).", _methodName, _invocations.len());
+        if(_invocations.len() == 0) throw format("Expected %s to have been called.", _methodName);
 
         foreach(invocation in _invocations) {
             if (invocation.params.len() != vargv.len()) continue;
@@ -198,15 +205,15 @@ class Spy {
             if (match) return true;
         }
 
-        local expectedParams = "";
-        foreach(param in vargv) expectedParams += param + ",";
-        expectedParams = expectedParams.slice(0, expectedParams.len()-1);
 
-        throw format("%s not called with (%s)", _methodName, expectedParams)
+        local expectedParams = http.jsonencode(vargv);
+        expectedParams = expectedParams.slice(2, expectedParams.len()-2);
+
+        throw format("Expected %s to have been called with (%s)", _methodName, expectedParams)
     }
 
     function shouldNotHaveBeenCalled() {
-        if(_invocations.len() != 0) throw format("%s called %d times (expected %d).", _methodName, _invocations.len(), 0);
+        if(_invocations.len() != 0) throw format("Expected %s to have not been called (called %d times).", _methodName, _invocations.len());
 
         return true;
     }
@@ -216,7 +223,7 @@ class Spy {
             if (invocation.returns == val) return true;
         }
 
-        throw "Expected " + _methodName + " to return " + val + ".";
+        throw format("Expected %s to return %s.", _methodName, val.tostring());
     }
 
     function shouldHaveThrown(err) {
@@ -224,7 +231,7 @@ class Spy {
             if (invocation.throws == err) return true;
         }
 
-        throw "Expected " + _methodName + " to throw " + err + ".";
+        throw format("Expected %s to throw %s.", _methodName, val.tostring());
     }
 
     //-------------------- PRIVATE / HELPER METHODS --------------------//
@@ -248,7 +255,7 @@ class Spy {
         return this;
     }
 
-    // Overload _get so we can access 'properties' as methods
+    // Overload _get so we can access 'properties' as methods (syntatic sugar)
     function _get(idx) {
         switch(idx) {
             case "and":
@@ -268,32 +275,3 @@ class Spy {
         return typeof _object[method];
     }
 }
-
-class X {
-    _x = null;
-
-    function get(cb) {
-        local request = http.get(http.agenturl());
-        request.sendasync(_processRespFactory(cb));
-    }
-
-    function _processRespFactory(cb) {
-        return function(resp) {
-            server.log("In CB");
-            cb(resp);
-        };
-    }
-}
-
-http.onrequest(function(req, resp) {
-    resp.send(200, "Yeup");
-});
-
-x <- Fake(X());
-Fake.CallsTo(x, "get").invokes(function() {
-    server.log("Hello!");
-}).and.callsBaseMethod();
-
-x.get(function(resp) {
-    server.log(resp.statuscode);
-});
