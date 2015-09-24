@@ -305,8 +305,6 @@ class A.Test {
 }
 
 class A.Suite {
-    static ASYNC = true;
-
     // Suite Name
     _name = null;
 
@@ -367,13 +365,16 @@ class A.Suite {
         _runTests();
     }
 
+    function _processResults(passed, failed, skipped) {
+        // We're done - log results
+        local total = passed + failed + skipped;
+        server.log("Completed Suite: " + _name);
+        server.log(format("Passed: %d/%d | Failed: %d/%d | Skipped: %d/%d", passed, total, failed, total, skipped, total));
+    }
+
     function _runTests(current = 0, passed = 0, failed = 0, skipped = 0) {
         if (current >= _tests.len()) {
-            // We're done - log results
-            local total = passed + failed + skipped;
-            server.log("Completed Suite: " + _name);
-            server.log(format("Passed: %d/%d | Failed: %d/%d | Skipped: %d/%d", passed, total, failed, total, skipped, total));
-
+            _processResults(passed, failed, skipped);
             return;
         };
 
