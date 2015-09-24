@@ -275,3 +275,174 @@ class A.Spy {
         return typeof _object[method];
     }
 }
+
+class A.Test {
+    _testName = null;
+    _testCallback = null;
+
+    _async = null;
+    _skip = null;
+
+    constructor(testName, testCallback) {
+        // Set ctor params
+        _testName = testName;
+        _testCallback = testCallback;
+
+        // Set defaults
+        _async = false;
+        _skip = false;
+    }
+
+    function async() {
+        _async = true;
+        return this;
+    }
+
+    function skip() {
+        _skip = true;
+        return this;
+    }
+}
+
+class A.Suite {
+    static ASYNC = true;
+
+    // Suite Name
+    _name = null;
+
+    // Test setup / teardown
+    _beforeEach = null;
+    _afterEach = null;
+
+    // The tests
+    _tests = null;
+
+    constructor(suiteName, suiteCallback) {
+        _name = suiteName;
+        _tests = [];
+
+        // Create the _beforeEach object
+        _beforeEach = { };
+        _beforeEach.callback <- function() {};
+        _beforeEach._isAsync <- false;
+        _beforeEach.async <- function() {
+            _isAsync = true;
+        }.bindenv(_beforeEach);
+
+        // Create the _afterEach object
+        _afterEach = { };
+        _afterEach.callback <- function() {};
+        _afterEach._isAsync <- false;
+        _afterEach.async <- function() {
+            _isAsync = true;
+        }.bindenv(_afterEach);
+
+        // Run the suite Callback (setup)
+        suiteCallback.bindenv(this)();
+
+        // Process the suite
+        _processSuite();
+    }
+
+    //---------- HELPER METHODS FOR SUITE CALLBACK ----------//
+    function beforeEach(callback) {
+        _beforeEach.callback <- callback;
+        return _beforeEach;
+    }
+
+    function afterEach(callback) {
+        _afterEach.callback <- callback;
+        return _afterEach;
+    }
+
+    function test(testName, testCallback) {
+        local newTest = A.Test(testName, testCallback);
+        _tests.push(newTest);
+        return newTest;
+    }
+
+    //-------------------- PRIVATE METHODS --------------------//
+    function _processSuite() {
+        server.log("Running Suite: " + _name);
+        _runTests();
+    }
+
+    function _runTests(current = 0, passed = 0, failed = 0, skipped = 0) {
+        if (current >= _tests.len()) {
+            // We're done - log results
+            local total = passed + failed + skipped;
+            server.log("Completed Suite: " + _name);
+            server.log(format("Passed: %d/%d | Failed: %d/%d | Skipped: %d/%d", passed, total, failed, total, skipped, total));
+
+            return;
+        };
+
+        _runSetup(current, passed, failed, skipped);
+    }
+
+    function _runSetup(current, passed, failed, skipped) {
+        if (!_beforeEach._isAsync) {
+            _beforeEach.callback();
+            _runTest(current, passed, failed, skipped);
+            return;
+        }
+
+        _beforeEach.callback(function() {
+            _runTest(current, passed, failed, skipped);
+        }.bindenv(this));
+    }
+
+    function _runTest(current, passed, failed, skipped) {
+        local thisTest = _tests[current];
+
+        // If we're skipping the test, move on to teardown
+        if (thisTest._skip) {
+            skipped++;
+            server.log(format("SKIPPED: %s", thisTest._testName));
+
+            _runTeardown(current, passed, failed, skipped);
+            return;
+        }
+
+        if (!thisTest._async) {
+            // Run the test
+            try {
+                thisTest._testCallback();
+
+                passed++;
+                server.log(format("PASSED: %s", thisTest._testName));
+            } catch(ex) {
+                failed++;
+                server.log(format("FAILED: %s (%s)", thisTest._testName, ex.tostring()));
+            }
+            _runTeardown(current, passed, failed, skipped);
+            return;
+        }
+
+        // Run the test
+        try {
+            thisTest._testCallback(function() {
+                passed++;
+                server.log(format("PASSED: %s", thisTest._testName));
+
+                _runTeardown(current, passed, failed, skipped);
+            }.bindenv(this));
+        } catch(ex) {
+            failed++;
+            server.log(format("FAILED: %s (%s)", thisTest._testName, ex.tostring()));
+            _runTeardown(current, passed, failed, skipped);
+        }
+    }
+
+    function _runTeardown(current, passed, failed, skipped) {
+        if (!_afterEach._isAsync) {
+            _afterEach.callback();
+            _runTests(current+1, passed, failed, skipped);
+            return;
+        }
+
+        _afterEach.callback(function() {
+            _runTests(current+1, passed, failed, skipped);
+        }.bindenv(this));
+    }
+}
